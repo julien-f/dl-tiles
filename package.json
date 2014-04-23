@@ -27,6 +27,10 @@
     "chai": "^1.9.1",
     "mocha": "^1.18.2"
   },
+  "directories": {
+    "bin": "./bin"
+  },
+  "preferGlobal": true,
   "scripts": {
     "test": "mocha index.spec.js"
   }
