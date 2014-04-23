@@ -1,0 +1,33 @@
+{
+  "name": "dl-tiles",
+  "version": "0.1.0",
+  "description": "Downloads tiles from OSM for a location and saves them in an MBTiles store",
+  "keywords": [
+    "tiles",
+    "bounding box",
+    "osm",
+    "openstreetmap",
+    "mbtiles"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/julien-f/dl-tiles"
+  },
+  "author": "Julien Fontanet <julien.fontanet@isonoe.net> (http://julien.isonoe.net/)",
+  "dependencies": {
+    "bluebird": "^1.2.3",
+    "exec-promise": "^0.2.1",
+    "lodash": "^2.4.1",
+    "map-tile-url": "^1.0.0",
+    "mbtiles": "^0.2.9",
+    "tilelive": "^4.5.3",
+    "yargs": "^1.2.1"
+  },
+  "devDependencies": {
+    "chai": "^1.9.1",
+    "mocha": "^1.18.2"
+  },
+  "scripts": {
+    "test": "mocha index.spec.js"
+  }
+}
