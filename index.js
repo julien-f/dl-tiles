@@ -110,9 +110,13 @@ var getBoundingBox = function (location) {
   var url = 'http://nominatim.openstreetmap.org/search?'+
     queryString.stringify(query);
   return got(url).then(function (data) {
-    var bbox = JSON.parse(data.toString())[0].boundingbox;
+    data = JSON.parse(data.toString())[0];
+    var bbox = data.boundingbox;
 
     return {
+      // FIXME: should not be there but needed for logging.
+      name: data['display_name'],
+
       north: +bbox[1],
       east: +bbox[3],
       south: +bbox[0],
@@ -175,6 +179,15 @@ var getTileUrl = function (tile) {
 // Inserts the tiles of a given location in a mbTiles store.
 exports = module.exports = function (location, zoom) {
   return getBoundingBox(location).then(function (bbox) {
+    // FIXME: a library should not log.
+    console.log([
+      bbox.name,
+      '- n: '+ bbox.north,
+      '- e: '+ bbox.east,
+      '- s: '+ bbox.south,
+      '- w: '+ bbox.west,
+    ].join('\n'));
+
     var tiles = getTilesList(bbox, zoom);
 
     // Starts downloading the tiles.
