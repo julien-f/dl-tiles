@@ -71,18 +71,27 @@ module.exports = function (args) {
     Promise.promisify(tilelive.load, tilelive)(url),
     dlTiles(opts._[1], opts.zoom),
   ]).spread(function (store, tiles) {
+    var putInfo = Promise.promisify(store.putInfo, store);
+    var putTile = Promise.promisify(store.putTile, store);
     var start = Promise.promisify(store.startWriting, store);
     var stop = Promise.promisify(store.stopWriting, store);
-    var put = Promise.promisify(store.putTile, store);
 
     var n = tiles.length;
     console.log('Downloading', n, 'tiles...');
 
     return start().then(function () {
+      return putInfo({
+        description: '',
+        format: 'png',
+        name: 'dl-tiles',
+        type: 'baselayer',
+        version: '0.1.0',
+      });
+    }).then(function () {
       return tiles.map(function (tile, i) {
         return tile.data.then(function (data) {
           console.log((i+1) +'/'+ n, 'downloaded:', tile.x +'×'+ tile.y);
-          return put(tile.z, tile.x, tile.y, data);
+          return putTile(tile.z, tile.x, tile.y, data);
         });
       });
     }).all().return().finally(stop);
