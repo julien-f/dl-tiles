@@ -15,12 +15,14 @@
   },
   "author": "Julien Fontanet <julien.fontanet@isonoe.net> (http://julien.isonoe.net/)",
   "dependencies": {
-    "bluebird": "^1.2.3",
+    "bluebird": "^1.2.4",
+    "event-to-promise": "^0.2.2",
     "exec-promise": "^0.2.1",
     "lodash": "^2.4.1",
-    "map-tile-url": "^1.0.0",
     "mbtiles": "^0.2.9",
+    "range-parser2": "^0.4.0",
     "tilelive": "^4.5.3",
+    "tilelive-http": "^0.1.2",
     "yargs": "^1.2.1"
   },
   "devDependencies": {
