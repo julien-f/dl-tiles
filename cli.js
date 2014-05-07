@@ -36,16 +36,29 @@ var searchLocation = require('./osm').search;
 
 //====================================================================
 
-var dlTiles = function (store, bbox, zooms, maxTiles) {
+var dlTiles = function (store, bbox, zooms, opts) {
+  opts || (opts = {});
+
+  var minZoom = zooms[0];
+  var maxZoom = zooms[zooms.length - 1];
+
   var scheme = tilelive.Scheme.create('scanline', {
-    minzoom: zooms[0],
-    maxzoom: zooms[zooms.length - 1],
+    minzoom: minZoom,
+    maxzoom: maxZoom,
     bbox: bbox && [bbox.west, bbox.south, bbox.east, bbox.north],
   });
 
   var nTiles = scheme.stats.total;
-  if (maxTiles && (maxTiles < nTiles))
+  if (opts.maxTiles && (opts.maxTiles < nTiles))
   {
+    if (opts.autoScale)
+    {
+      --maxZoom;
+      zooms = [Math.min(minZoom, maxZoom), maxZoom];
+      console.log('max zoom is now:'+ maxZoom);
+      return dlTiles(store, bbox, zooms, opts);
+    }
+
     throw new Error('too much tiles: '+ nTiles);
   }
 
@@ -140,7 +153,10 @@ module.exports = function (args) {
   var globalTiles = dlTiles(
     store, null,
     parseRange.withoutUnions(opts['global-zoom']),
-    opts['max-tiles']
+    {
+      autoScale: true,
+      maxTiles: opts['max-tiles'],
+    }
   );
   var tiles = Promise.try(function () {
     var north = opts.north;
@@ -191,7 +207,10 @@ module.exports = function (args) {
     return dlTiles(
       store, bbox,
       parseRange.withoutUnions(opts.zoom),
-      opts['max-tiles']
+      {
+        autoScale: true,
+        maxTiles: opts['max-tiles'],
+      }
     );
   });
 
