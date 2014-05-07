@@ -36,12 +36,18 @@ var searchLocation = require('./osm').search;
 
 //====================================================================
 
-var dlTiles = function (store, bbox, zooms) {
+var dlTiles = function (store, bbox, zooms, maxTiles) {
   var scheme = tilelive.Scheme.create('scanline', {
     minzoom: zooms[0],
     maxzoom: zooms[zooms.length - 1],
     bbox: bbox && [bbox.west, bbox.south, bbox.east, bbox.north],
   });
+
+  var nTiles = scheme.stats.total;
+  if (maxTiles && (maxTiles < nTiles))
+  {
+    throw new Error('too much tiles: '+ nTiles);
+  }
 
   var task = new tilelive.CopyTask(
     'http://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -66,7 +72,11 @@ module.exports = function (args) {
     .usage('Usage: $0 [<option>...] <mbTiles> <location>')
     .example(
       '$0 paris.mbtiles "Paris, France"',
-      'Download tiles for a location'
+      'Download tiles from a named location'
+    )
+    .example(
+      '$0 -n 34.337 -e -118.155 -s 33.704 -w -118.668 LA.mbtiles',
+      'Download tiles from a bounding box'
     )
     .options({
       h: {
@@ -79,6 +89,11 @@ module.exports = function (args) {
         boolean: true,
         describe: 'display the version number',
       },
+      m: {
+        alias: 'max-tiles',
+        default: 1e3,
+        describe: 'maximum number of tiles',
+      },
       g: {
         alias: 'global-zoom',
         default: '0-3',
@@ -89,8 +104,24 @@ module.exports = function (args) {
         default: '0-12',
         describe: 'zoom level (can be a range)',
       },
+      n: {
+        alias: 'north',
+        describe: 'North component of the bounding box'
+      },
+      s: {
+        alias: 'south',
+        describe: 'South component of the bounding box'
+      },
+      e: {
+        alias: 'east',
+        describe: 'East component of the bounding box'
+      },
+      w: {
+        alias: 'west',
+        describe: 'West component of the bounding box'
+      },
     })
-    .demand(2)
+    .demand(1)
     .parse(args)
   ;
 
@@ -104,13 +135,40 @@ module.exports = function (args) {
     return require('./package').version;
   }
 
-  var globalZooms = parseRange.withoutUnions(opts['global-zoom']);
-  var zooms = parseRange.withoutUnions(opts.zoom);
   var store = 'mbtiles://'+ resolvePath(opts._[0]);
 
-  return Promise.all([
-    dlTiles(store, null, globalZooms),
-    searchLocation(opts._[1]).then(function (info) {
+  var globalTiles = dlTiles(
+    store, null,
+    parseRange.withoutUnions(opts['global-zoom']),
+    opts['max-tiles']
+  );
+  var tiles = Promise.try(function () {
+    var north = opts.north;
+    var south = opts.south;
+    var east = opts.east;
+    var west = opts.west;
+    if (north && south && east && west)
+    {
+      return {
+        north: +north,
+        south: +south,
+        east: +east,
+        west: +west,
+      };
+    }
+
+    if (north || south || east || west)
+    {
+      throw new Error('missing components for bounding box');
+    }
+
+    var location = opts._[1];
+    if (!location)
+    {
+      throw new Error('you must specify either a location or a bounding box');
+    }
+
+    return searchLocation(opts._[1]).then(function (info) {
       var bbox = info.boundingbox;
       bbox = {
         south: +bbox[0],
@@ -128,8 +186,14 @@ module.exports = function (args) {
       ].join('\n'));
 
       return bbox;
-    }).then(function (bbox) {
-      return dlTiles(store, bbox, zooms);
-    }),
-  ]).return();
+    });
+  }).then(function (bbox) {
+    return dlTiles(
+      store, bbox,
+      parseRange.withoutUnions(opts.zoom),
+      opts['max-tiles']
+    );
+  });
+
+  return Promise.all([globalTiles, tiles]).return();
 };
