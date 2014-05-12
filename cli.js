@@ -151,16 +151,11 @@ module.exports = function (args) {
   }
 
   var store = 'mbtiles://'+ resolvePath(opts._[0]);
+  var zooms = parseRange.withoutUnions(opts.zoom);
+  var globalZooms = parseRange.withoutUnions(opts['global-zoom']);
 
-  var globalTiles = dlTiles(
-    store, null,
-    parseRange.withoutUnions(opts['global-zoom']),
-    {
-      autoScale: true,
-      maxTiles: opts['max-tiles'],
-    }
-  );
-  var tiles = Promise.try(function () {
+  return Promise.try(function () {
+    // Local tiles.
     var north = opts.north;
     var south = opts.south;
     var east = opts.east;
@@ -208,13 +203,21 @@ module.exports = function (args) {
   }).then(function (bbox) {
     return dlTiles(
       store, bbox,
-      parseRange.withoutUnions(opts.zoom),
+      zooms,
       {
         autoScale: true,
         maxTiles: opts['max-tiles'],
       }
     );
-  });
-
-  return Promise.all([globalTiles, tiles]).return();
+  }).then(function () {
+    // Global tiles.
+    return dlTiles(
+      store, null,
+      globalZooms,
+      {
+        autoScale: true,
+        maxTiles: opts['max-tiles'],
+      }
+    );
+  }).return();
 };
