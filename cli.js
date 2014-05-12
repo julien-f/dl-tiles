@@ -78,6 +78,8 @@ var dlTiles = function (store, bbox, zooms, opts) {
   return eventToPromise(task, 'finished');
 };
 
+require('http').globalAgent.maxSockets = 2;
+
 //====================================================================
 
 module.exports = function (args) {
