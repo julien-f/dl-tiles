@@ -150,11 +150,30 @@ module.exports = function (args) {
     return require('./package').version;
   }
 
-  var store = 'mbtiles://'+ resolvePath(opts._[0]);
+  var loadStore = Promise.promisify(tilelive.load, tilelive);
+
+  var storeUri = 'mbtiles://'+ resolvePath(opts._[0]);
+  var store;
   var zooms = parseRange.withoutUnions(opts.zoom);
   var globalZooms = parseRange.withoutUnions(opts['global-zoom']);
 
-  return Promise.try(function () {
+  return loadStore(storeUri).then(function (tmp) {
+    store = tmp;
+
+    var startWriting = Promise.promisify(store.startWriting, store);
+    var stopWriting = Promise.promisify(store.stopWriting, store);
+    var putInfo = Promise.promisify(store.putInfo, store);
+
+    return startWriting().then(function () {
+      putInfo({
+        description: '',
+        format: 'png',
+        name: 'dl-tiles',
+        type: 'baselayer',
+        version: '0.1.0',
+      })
+    }).finally(stopWriting);
+  }).then(function () {
     // Local tiles.
     var north = opts.north;
     var south = opts.south;
