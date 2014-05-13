@@ -23,6 +23,7 @@ yargs.fail(function (msg) {
 var parseRange = require('range-parser2');
 
 var Promise = require('bluebird');
+Promise.longStackTraces();
 
 var eventToPromise = require('event-to-promise');
 
@@ -160,18 +161,18 @@ module.exports = function (args) {
   return loadStore(storeUri).then(function (tmp) {
     store = tmp;
 
+    var putInfo = Promise.promisify(store.putInfo, store);
     var startWriting = Promise.promisify(store.startWriting, store);
     var stopWriting = Promise.promisify(store.stopWriting, store);
-    var putInfo = Promise.promisify(store.putInfo, store);
 
     return startWriting().then(function () {
-      putInfo({
+      return putInfo({
         description: '',
         format: 'png',
         name: 'dl-tiles',
         type: 'baselayer',
         version: '0.1.0',
-      })
+      });
     }).finally(stopWriting);
   }).then(function () {
     // Local tiles.
