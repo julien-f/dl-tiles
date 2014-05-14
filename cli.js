@@ -154,13 +154,10 @@ module.exports = function (args) {
   var loadStore = Promise.promisify(tilelive.load, tilelive);
 
   var storeUri = 'mbtiles://'+ resolvePath(opts._[0]);
-  var store;
   var zooms = parseRange.withoutUnions(opts.zoom);
   var globalZooms = parseRange.withoutUnions(opts['global-zoom']);
 
-  return loadStore(storeUri).then(function (tmp) {
-    store = tmp;
-
+  return loadStore(storeUri).then(function (store) {
     var putInfo = Promise.promisify(store.putInfo, store);
     var startWriting = Promise.promisify(store.startWriting, store);
     var stopWriting = Promise.promisify(store.stopWriting, store);
@@ -222,7 +219,7 @@ module.exports = function (args) {
     });
   }).then(function (bbox) {
     return dlTiles(
-      store, bbox,
+      storeUri, bbox,
       zooms,
       {
         autoScale: true,
@@ -232,7 +229,7 @@ module.exports = function (args) {
   }).then(function () {
     // Global tiles.
     return dlTiles(
-      store, null,
+      storeUri, null,
       globalZooms,
       {
         autoScale: true,
