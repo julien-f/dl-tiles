@@ -1,6 +1,6 @@
 {
   "name": "dl-tiles",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Downloads tiles from OSM for a location and saves them in an MBTiles store",
   "keywords": [
     "tiles",
