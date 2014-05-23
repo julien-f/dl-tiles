@@ -29,7 +29,7 @@ var eventToPromise = require('event-to-promise');
 
 var tilelive = require('tilelive');
 require('mbtiles').registerProtocols(tilelive);
-require('tilelive-http').registerProtocols(tilelive);
+require('tilelive-http')(tilelive);
 
 //--------------------------------------------------------------------
 

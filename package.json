@@ -16,18 +16,18 @@
   "author": "Julien Fontanet <julien.fontanet@isonoe.net> (http://julien.isonoe.net/)",
   "dependencies": {
     "bluebird": "^1.2.4",
-    "event-to-promise": "^0.2.2",
-    "exec-promise": "^0.2.1",
+    "event-to-promise": "^0.2.4",
+    "exec-promise": "^0.2.4",
     "lodash": "^2.4.1",
-    "mbtiles": "^0.2.9",
-    "range-parser2": "^0.4.0",
+    "mbtiles": "^0.4.3",
+    "range-parser2": "^0.4.1",
     "tilelive": "^4.5.3",
-    "tilelive-http": "^0.1.2",
-    "yargs": "^1.2.1"
+    "tilelive-http": "^0.2.3",
+    "yargs": "^1.2.2"
   },
   "devDependencies": {
     "chai": "^1.9.1",
-    "mocha": "^1.18.2"
+    "mocha": "^1.19.0"
   },
   "directories": {
     "bin": "./bin"
