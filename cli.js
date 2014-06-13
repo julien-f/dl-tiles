@@ -2,6 +2,7 @@
 
 //====================================================================
 
+var fs = require('fs');
 var resolvePath = require('path').resolve;
 
 //--------------------------------------------------------------------
@@ -79,6 +80,31 @@ var dlTiles = function (store, bbox, zooms, opts) {
   return eventToPromise(task, 'finished');
 };
 
+var saveBbox = (function () {
+  var readFile = Promise.promisify(fs.readFile);
+  var writeFile = Promise.promisify(fs.writeFile);
+  var promise = Promise.cast();
+
+  return function (file, code, bbox) {
+    promise = promise.then(function () {
+      return readFile(file, {encoding: 'utf8'});
+    }).then(JSON.parse).catch(function () {
+      return {};
+    }).then(function (collection) {
+      var cur = collection[code] || (collection[code] = {});
+      cur = cur.map || (cur.map = {});
+      cur.viewport = {
+        ne: { lat: bbox.north, lng: bbox.east },
+        sw: { lat: bbox.south, lng: bbox.west }
+      };
+
+      return writeFile(file, JSON.stringify(collection, null, 2));
+    });
+
+    return promise;
+  };
+})();
+
 require('http').globalAgent.maxSockets = 2;
 
 //====================================================================
@@ -135,6 +161,12 @@ module.exports = function (args) {
       w: {
         alias: 'west',
         describe: 'West component of the bounding box'
+      },
+      'viewport-file': {
+        describe: 'JSON file in which to save the viewport',
+      },
+      'city-code': {
+        describe: 'IATA code of the current city required to save the viewport',
       },
     })
     .demand(1)
@@ -217,6 +249,14 @@ module.exports = function (args) {
 
       return bbox;
     });
+  }).tap(function (bbox) {
+    var code = opts['city-code'];
+    var file = opts['viewport-file'];
+
+    if (file && code)
+    {
+      return saveBbox(file, code, bbox);
+    }
   }).then(function (bbox) {
     return dlTiles(
       storeUri, bbox,

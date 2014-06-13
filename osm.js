@@ -59,5 +59,10 @@ exports.search = function (location) {
     queryString.stringify(query);
   return got(url).then(function (data) {
     return JSON.parse(data.toString())[0];
+  }).tap(function (info) {
+    if (!info)
+    {
+      throw new Error('no result found');
+    }
   });
 };
