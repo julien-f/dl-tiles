@@ -1,16 +1,27 @@
+#!/usr/bin/env node
+
 'use strict';
 
 //====================================================================
 
+var Bluebird = require('bluebird');
+Bluebird.longStackTraces();
+
 var fs = require('fs');
-var resolvePath = require('path').resolve;
 
-//--------------------------------------------------------------------
-
+var eventToPromise = require('event-to-promise');
+var parseRange = require('range-parser2');
+var progress = require('progress-stream');
+var promisify = Bluebird.promisify;
+var tilelive = require('tilelive');
 var yargs = require('yargs');
 
+var searchLocation = require('./osm').search;
+
+//====================================================================
+
 // Makes yargs throws instead of exiting.
-yargs.fail(function (msg) {
+yargs.fail(function handleYargsFailure(msg) {
   var help = yargs.help();
 
   if (msg)
@@ -21,69 +32,89 @@ yargs.fail(function (msg) {
   throw help;
 });
 
-var parseRange = require('range-parser2');
-
-var Promise = require('bluebird');
-Promise.longStackTraces();
-
-var eventToPromise = require('event-to-promise');
-
-var tilelive = require('tilelive');
+// Registers protocols for Tilelive.
 require('mbtiles').registerProtocols(tilelive);
+require('tilelive-file').registerProtocols(tilelive);
 require('tilelive-http')(tilelive);
+
+var loadStore = promisify(tilelive.load, tilelive);
 
 //--------------------------------------------------------------------
 
-var searchLocation = require('./osm').search;
+// Limit concurrent queries to OpenStreetMap.
+require('http').globalAgent.maxSockets = 2;
 
-//====================================================================
-
-var dlTiles = function (store, bbox, zooms, opts) {
+function dlTiles(dst, bbox, zooms, opts) {
   opts || (opts = {});
 
   var minZoom = zooms[0];
   var maxZoom = zooms[zooms.length - 1];
 
-  var scheme = tilelive.Scheme.create('scanline', {
-    minzoom: minZoom,
-    maxzoom: maxZoom,
-    bbox: bbox && [bbox.west, bbox.south, bbox.east, bbox.north],
-  });
+  return Bluebird.join(
+    loadStore('http://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+    loadStore(dst),
+    function (src, dst) {
+      var input = tilelive.createReadStream(src, {
+        type: 'scanline',
+        bounds: bbox && [bbox.west, bbox.south, bbox.east, bbox.north],
+        minzoom: minZoom,
+        maxzoom: maxZoom,
+      });
 
-  var nTiles = scheme.stats.total;
-  if (opts.maxTiles && (opts.maxTiles < nTiles))
-  {
-    if (opts.autoScale)
-    {
-      --maxZoom;
-      zooms = [Math.min(minZoom, maxZoom), maxZoom];
-      console.log('max zoom is now:'+ maxZoom);
-      return dlTiles(store, bbox, zooms, opts);
+      var nTiles = input.stats.total;
+      if (opts.maxTiles && (opts.maxTiles < nTiles))
+      {
+        if (opts.autoScale)
+        {
+          --maxZoom;
+          zooms = [Math.min(minZoom, maxZoom), maxZoom];
+          console.log('max zoom is now:'+ maxZoom);
+          return dlTiles(dst, bbox, zooms, opts);
+        }
+
+        throw new Error('too much tiles: '+ nTiles);
+      }
+
+      var output = tilelive.createWriteStream(dst);
+
+      if (opts.progress) {
+        var prog = progress({
+          objectMode: true,
+          time: 100,
+        });
+
+        input.on('length', function (length) {
+          // Number of tiles + metadata (1).
+          prog.setLength(length + 1);
+        });
+        prog.on('progress', (function (fn) {
+          return function onProgress(info) {
+            // var stats = input.stats;
+            fn({
+              percentage: info.percentage,
+              done: info.transferred,
+              total: info.length,
+
+              eta: info.eta,
+              speed: info.speed,
+            });
+          };
+        })(opts.progress));
+
+        input.pipe(prog).pipe(output);
+      } else {
+        input.pipe(output);
+      }
+
+      return eventToPromise(output, 'finish');
     }
-
-    throw new Error('too much tiles: '+ nTiles);
-  }
-
-  var task = new tilelive.CopyTask(
-    'http://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    store,
-    scheme
   );
-  task.on('progress', function (info) {
-    console.log([
-      info.processed, '/', info.total,
-      ' downloaded (', info.remaining, ' remaining)'
-    ].join(''));
-  });
-  task.start();
-
-  return eventToPromise(task, 'finished');
-};
+}
 
 var saveBbox = (function () {
-  var readFile = Promise.promisify(fs.readFile);
-  var writeFile = Promise.promisify(fs.writeFile);
-  var promise = Promise.cast();
+  var readFile = promisify(fs.readFile);
+  var writeFile = promisify(fs.writeFile);
+  var promise = Bluebird.resolve();
 
   return function (file, code, bbox) {
     promise = promise.then(function () {
@@ -105,19 +136,27 @@ var saveBbox = (function () {
   };
 })();
 
-require('http').globalAgent.maxSockets = 2;
-
 //====================================================================
 
-module.exports = function (args) {
+function onProgress(info) {
+  console.log('%s%: %s/%s @ %s/s | %ss left',
+    info.percentage.toFixed(2),
+    info.done,
+    info.total,
+    info.speed.toFixed(1),
+    info.eta
+  );
+}
+
+function main(args) {
   var opts = yargs
     .usage('Usage: $0 [<option>...] <mbTiles> <location>')
     .example(
-      '$0 paris.mbtiles "Paris, France"',
+      '$0 mbtiles:./paris.mbtiles "Paris, France"',
       'Download tiles from a named location'
     )
     .example(
-      '$0 -n 34.337 -e -118.155 -s 33.704 -w -118.668 LA.mbtiles',
+      '$0 -n 34.337 -e -118.155 -s 33.704 -w -118.668 mbtiles:./LA.mbtiles',
       'Download tiles from a bounding box'
     )
     .options({
@@ -183,16 +222,14 @@ module.exports = function (args) {
     return require('./package').version;
   }
 
-  var loadStore = Promise.promisify(tilelive.load, tilelive);
-
-  var storeUri = 'mbtiles://'+ resolvePath(opts._[0]);
+  var storeUri = opts._[0];//'mbtiles://'+ resolvePath(opts._[0]);
   var zooms = parseRange.withoutUnions(opts.zoom);
   var globalZooms = parseRange.withoutUnions(opts['global-zoom']);
 
   return loadStore(storeUri).then(function (store) {
-    var putInfo = Promise.promisify(store.putInfo, store);
-    var startWriting = Promise.promisify(store.startWriting, store);
-    var stopWriting = Promise.promisify(store.stopWriting, store);
+    var putInfo = promisify(store.putInfo, store);
+    var startWriting = promisify(store.startWriting, store);
+    var stopWriting = promisify(store.stopWriting, store);
 
     return startWriting().then(function () {
       return putInfo({
@@ -264,17 +301,28 @@ module.exports = function (args) {
       {
         autoScale: true,
         maxTiles: opts['max-tiles'],
+        progress: onProgress,
       }
     );
   }).then(function () {
     // Global tiles.
     return dlTiles(
-      storeUri, null,
+      storeUri, undefined,
       globalZooms,
       {
         autoScale: true,
         maxTiles: opts['max-tiles'],
+        progress: onProgress,
       }
     );
   }).return();
-};
+}
+
+//====================================================================
+
+exports = module.exports = main;
+exports.dlTiles = dlTiles;
+
+if (!module.parent) {
+  require('exec-promise')(main);
+}
