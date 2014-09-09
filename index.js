@@ -16,7 +16,7 @@ var promisify = Bluebird.promisify;
 var tilelive = require('tilelive');
 var yargs = require('yargs');
 
-var searchLocation = require('./osm').search;
+var searchLocation = require('./geo').search;
 
 //====================================================================
 
@@ -42,13 +42,15 @@ var loadStore = promisify(tilelive.load, tilelive);
 //--------------------------------------------------------------------
 
 // Limit concurrent queries to OpenStreetMap.
-require('http').globalAgent.maxSockets = 2;
+tilelive.stream.setConcurrency(2);
 
-function dlTiles(dst, bbox, zooms, opts) {
+function dlTiles(dst, opts) {
   opts || (opts = {});
 
-  var minZoom = zooms[0];
-  var maxZoom = zooms[zooms.length - 1];
+  var bbox = opts.bbox;
+
+  var minZoom = opts.minZoom || opts.zoom || 0;
+  var maxZoom = opts.maxZoom || opts.zoom || 19;
 
   return Bluebird.join(
     loadStore('http://tile.openstreetmap.org/{z}/{x}/{y}.png'),
@@ -66,10 +68,11 @@ function dlTiles(dst, bbox, zooms, opts) {
       {
         if (opts.autoScale)
         {
-          --maxZoom;
-          zooms = [Math.min(minZoom, maxZoom), maxZoom];
-          console.log('max zoom is now:'+ maxZoom);
-          return dlTiles(dst, bbox, zooms, opts);
+          opts.maxZoom = maxZoom - 1;
+          opts.minZoom = Math.min(minZoom, maxZoom);
+
+          console.log('max zoom is now:'+ opts.maxZoom);
+          return dlTiles(dst, bbox, opts);
         }
 
         throw new Error('too much tiles: '+ nTiles);
@@ -77,7 +80,7 @@ function dlTiles(dst, bbox, zooms, opts) {
 
       var output = tilelive.createWriteStream(dst);
 
-      if (opts.progress) {
+      if (opts.onProgress) {
         var prog = progress({
           objectMode: true,
           time: 100,
@@ -99,7 +102,7 @@ function dlTiles(dst, bbox, zooms, opts) {
               speed: info.speed,
             });
           };
-        })(opts.progress));
+        })(opts.onProgress));
 
         input.pipe(prog).pipe(output);
       } else {
@@ -295,26 +298,23 @@ function main(args) {
       return saveBbox(file, code, bbox);
     }
   }).then(function (bbox) {
-    return dlTiles(
-      storeUri, bbox,
-      zooms,
-      {
-        autoScale: true,
-        maxTiles: opts['max-tiles'],
-        progress: onProgress,
-      }
-    );
+    return dlTiles(storeUri, {
+      autoScale: true,
+      bbox: bbox,
+      maxTiles: opts['max-tiles'],
+      maxZoom: zooms[zooms.length - 1],
+      minZoom: zooms[0],
+      onProgress: onProgress,
+    });
   }).then(function () {
     // Global tiles.
-    return dlTiles(
-      storeUri, undefined,
-      globalZooms,
-      {
-        autoScale: true,
-        maxTiles: opts['max-tiles'],
-        progress: onProgress,
-      }
-    );
+    return dlTiles(storeUri, {
+      autoScale: true,
+      maxTiles: opts['max-tiles'],
+      maxZoom: globalZooms[globalZooms.length - 1],
+      minZoom: globalZooms[0],
+      onProgress: onProgress,
+    });
   }).return();
 }
 
